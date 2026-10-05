@@ -1,0 +1,35 @@
+{
+  "name": "booking-tour",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "seed": "node seed.js",
+    "seed:promotions": "node seed_promotions.js",
+    "seed:vehicles": "node seed_vehicles.js",
+    "seed:tours": "node seed_tours.js",
+    "seed:guides": "node seed_guides.js",
+    "migrate:note": "node add_note_column.js",
+    "migrate:tours": "node add_tour_columns.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.0.12",
+    "pg": "^8.23.0",
+    "prom-client": "^15.1.3"
+  }
+}

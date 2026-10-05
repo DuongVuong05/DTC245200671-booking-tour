@@ -1,0 +1,185 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: booking-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: booking_tour
+      POSTGRES_USER: booking_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Thiếu POSTGRES_PASSWORD trong .env — xem .env.example}
+    # ports:
+    #   - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - db-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking_admin -d booking_tour"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:8.5
+    container_name: booking-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Thiếu PGADMIN_PASSWORD trong .env — xem .env.example}
+    ports:
+      - "5050:80"
+    networks:
+      - db-net
+    depends_on:
+      - postgres
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: booking-postgres-exporter
+    restart: unless-stopped
+    environment:
+      # DSN dạng keyword để tránh lỗi parse URI khi mật khẩu chứa ký tự đặc biệt (@, #...)
+      DATA_SOURCE_NAME: "host=postgres port=5432 user=booking_admin password='${POSTGRES_PASSWORD:?Thiếu POSTGRES_PASSWORD}' dbname=booking_tour sslmode=disable"
+    # ports:
+    #   - "9187:9187"
+    networks:
+      - db-net
+      - monitor-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    container_name: booking-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/tours"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=booking_tour
+      - DB_USER=booking_admin
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?Thiếu POSTGRES_PASSWORD trong .env — xem .env.example}
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:8082,http://localhost:8888}
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - db-net
+      - backend-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: booking-frontend
+    restart: unless-stopped
+    # ports:
+    #   - "8082:8080"
+    networks:
+      - backend-net
+      - frontend-net
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginxinc/nginx-unprivileged:alpine
+    container_name: booking-nginx
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    ports:
+      - "8888:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - frontend-net
+      - backend-net
+    depends_on:
+      - frontend
+      - backend
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: booking-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitor-net
+      - frontend-net
+      - backend-net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: booking-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      # Tự động nạp datasource + dashboard (không cần cấu hình tay sau mỗi lần tạo lại container)
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - monitor-net
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: booking-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitor-net
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: booking-promtail
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitor-net
+
+volumes:
+  postgres_data:
+  uploads_data:
+  loki_data:
+
+networks:
+  frontend-net:
+  backend-net:
+  db-net:
+  monitor-net:
