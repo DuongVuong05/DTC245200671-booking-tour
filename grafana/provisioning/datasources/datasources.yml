@@ -1,0 +1,19 @@
+# Grafana provisioning datasource — tự nạp khi container khởi động.
+# Không dùng localhost: kết nối giữa các container đi qua tên service trong mạng monitor-net.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: booking-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: Loki
+    uid: booking-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
